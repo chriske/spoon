@@ -79,6 +79,8 @@ public final class SpoonDeviceRunner {
   private final List<ITestRunListener> testRunListeners;
   private final boolean grantAll;
 
+  private IDevice device;
+
   /**
    * Create a test runner for a single device.
    *
@@ -164,25 +166,14 @@ public final class SpoonDeviceRunner {
     }
   }
 
-  /** Execute instrumentation on the target device and return a result summary. */
-  public DeviceResult run(AndroidDebugBridge adb) {
-    String testPackage = instrumentationInfo.getInstrumentationPackage();
-    String testRunner = instrumentationInfo.getTestRunnerClass();
-
-    logDebug(debug, "InstrumentationInfo: [%s]", instrumentationInfo);
-
-    if (debug) {
-      SpoonUtils.setDdmlibInternalLoggingLevel();
-    }
-
-    DeviceResult.Builder result = new DeviceResult.Builder();
-
-    IDevice device = obtainRealDevice(adb, serial);
+  /** Prepare the target device for the instrumentation */
+  public DeviceDetails prepareDevice(AndroidDebugBridge adb) {
+    device = obtainRealDevice(adb, serial);
     logDebug(debug, "Got realDevice for [%s]", serial);
 
     // Get relevant device information.
     final DeviceDetails deviceDetails = DeviceDetails.createForDevice(device);
-    result.setDeviceDetails(deviceDetails);
+
     logDebug(debug, "[%s] setDeviceDetails %s", serial, deviceDetails);
 
     DdmPreferences.setTimeOut((int) adbTimeout.toMillis());
@@ -197,16 +188,16 @@ public final class SpoonDeviceRunner {
     } catch (InstallException e) {
       logInfo("InstallException while install app apk on device [%s]", serial);
       e.printStackTrace(System.out);
-      return result.markInstallAsFailed(
-              "Unable to install application APK.").addException(e).build();
+      //return result.markInstallAsFailed(
+      //    "Unable to install application APK.").addException(e).build();
     }
     try {
       device.installPackage(testApk.getAbsolutePath(), true);
     } catch (InstallException e) {
       logInfo("InstallException while install test apk on device [%s]", serial);
       e.printStackTrace(System.out);
-      return result.markInstallAsFailed(
-              "Unable to install instrumentation APK.").addException(e).build();
+      //return result.markInstallAsFailed(
+      //    "Unable to install instrumentation APK.").addException(e).build();
     }
 
     // If this is Android Marshmallow or above grant WRITE_EXTERNAL_STORAGE
@@ -224,10 +215,27 @@ public final class SpoonDeviceRunner {
         logInfo("Exception while granting external storage access to application apk"
             + "on device [%s]", serial);
         e.printStackTrace(System.out);
-        return result.markInstallAsFailed(
-            "Unable to grant external storage access to application APK.").addException(e).build();
+        //return result.markInstallAsFailed(
+        //    "Unable to grant external storage access to application APK.").addException(e).build();
       }
     }
+
+    return deviceDetails;
+  }
+
+  /** Execute instrumentation on the target device and return a result summary. */
+  public DeviceResult run(DeviceDetails deviceDetails) {
+    String testPackage = instrumentationInfo.getInstrumentationPackage();
+    String testRunner = instrumentationInfo.getTestRunnerClass();
+
+    logDebug(debug, "InstrumentationInfo: [%s]", instrumentationInfo);
+
+    if (debug) {
+      SpoonUtils.setDdmlibInternalLoggingLevel();
+    }
+
+    DeviceResult.Builder result = new DeviceResult.Builder();
+    result.setDeviceDetails(deviceDetails);
 
     // Create the output directory, if it does not already exist.
     work.mkdirs();
@@ -532,7 +540,8 @@ public final class SpoonDeviceRunner {
       }
 
       AndroidDebugBridge adb = SpoonUtils.initAdb(target.sdk, target.adbTimeout);
-      DeviceResult result = target.run(adb);
+      DeviceDetails details = target.prepareDevice(adb);
+      DeviceResult result = target.run(details);
       AndroidDebugBridge.terminate();
 
       // Write device result file.

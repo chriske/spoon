@@ -174,7 +174,9 @@ public final class SpoonRunner {
       String safeSerial = SpoonUtils.sanitizeSerial(serial);
       try {
         logDebug(debug, "[%s] Starting execution.", serial);
-        summary.addResult(safeSerial, getTestRunner(serial, 0, 0, testInfo).run(adb));
+        SpoonDeviceRunner testRunner = getTestRunner(serial, 0, 0, testInfo);
+        DeviceDetails deviceDetails = testRunner.prepareDevice(adb);
+        summary.addResult(safeSerial, testRunner.run(deviceDetails));
       } catch (Exception e) {
         logDebug(debug, "[%s] Execution exception!", serial);
         e.printStackTrace(System.out);
