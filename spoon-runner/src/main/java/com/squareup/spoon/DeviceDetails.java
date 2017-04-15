@@ -89,10 +89,27 @@ public final class DeviceDetails {
     String api = emptyToNull(device.getProperty("ro.build.version.sdk"));
     int apiLevel = api != null ? Integer.parseInt(api) : UNKNOWN_API_LEVEL;
 
-    String language = emptyToNull(device.getProperty("ro.product.locale.language"));
-    language = DeviceUtils.scrubLanguage(language);
 
-    String region = emptyToNull(device.getProperty("ro.product.locale.region"));
+    //language and region properties has been removed from API 23, only ro.product.locale exists
+    String language = emptyToNull(device.getProperty("ro.product.locale.language"));
+    String region;
+
+    if (language != null) {
+      language = DeviceUtils.scrubLanguage(language);
+      region = emptyToNull(device.getProperty("ro.product.locale.region"));
+    } else {
+      String locale = emptyToNull(device.getProperty("ro.product.locale"));
+      if (locale != null) {
+        String[] localAndRegion = locale.split("-");
+        language = emptyToNull(localAndRegion[0]);
+        language = DeviceUtils.scrubLanguage(language);
+
+        region = emptyToNull(localAndRegion[1]);
+      } else {
+        language = null;
+        region = null;
+      }
+    }
 
     boolean emulator = device.isEmulator();
     String avdName = emptyToNull(device.getAvdName());
