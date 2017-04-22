@@ -1,4 +1,4 @@
-include ':spoon-common'
+include ':spoon-common', ':spoon-locale-switcher'
 include ':spoon-client'
 include ':spoon-runner'
 include ':test-app'

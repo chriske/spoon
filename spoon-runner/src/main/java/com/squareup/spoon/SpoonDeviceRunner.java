@@ -1,23 +1,29 @@
 package com.squareup.spoon;
 
+import com.android.ddmlib.AdbCommandRejectedException;
 import com.android.ddmlib.AndroidDebugBridge;
 import com.android.ddmlib.CollectingOutputReceiver;
 import com.android.ddmlib.DdmPreferences;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.InstallException;
+import com.android.ddmlib.ShellCommandUnresponsiveException;
+import com.android.ddmlib.TimeoutException;
 import com.android.ddmlib.logcat.LogCatMessage;
 import com.android.ddmlib.testrunner.IRemoteAndroidTestRunner;
 import com.android.ddmlib.testrunner.ITestRunListener;
 import com.android.ddmlib.testrunner.RemoteAndroidTestRunner;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
+import com.squareup.spoon.html.HtmlRenderer;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -26,6 +32,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import org.apache.commons.io.FileUtils;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.io.filefilter.TrueFileFilter;
 
 import static com.android.ddmlib.FileListingService.FileEntry;
@@ -58,6 +65,7 @@ public final class SpoonDeviceRunner {
   private final File sdk;
   private final File apk;
   private final File testApk;
+  private final File output;
   private final String serial;
   private final int shardIndex;
   private final int numShards;
@@ -68,11 +76,11 @@ public final class SpoonDeviceRunner {
   private final String className;
   private final String methodName;
   private final IRemoteAndroidTestRunner.TestSize testSize;
-  private final File work;
-  private final File junitReport;
-  private final File imageDir;
-  private final File coverageDir;
-  private final File fileDir;
+  private File work;
+  private File junitReport;
+  private File imageDir;
+  private File coverageDir;
+  private File fileDir;
   private final String classpath;
   private final SpoonInstrumentationInfo instrumentationInfo;
   private boolean codeCoverage;
@@ -106,6 +114,7 @@ public final class SpoonDeviceRunner {
     this.sdk = sdk;
     this.apk = apk;
     this.testApk = testApk;
+    this.output = output;
     this.serial = serial;
     this.shardIndex = shardIndex;
     this.numShards = numShards;
@@ -121,10 +130,6 @@ public final class SpoonDeviceRunner {
     this.codeCoverage = codeCoverage;
     serial = SpoonUtils.sanitizeSerial(serial);
     this.work = FileUtils.getFile(output, TEMP_DIR, serial);
-    this.junitReport = FileUtils.getFile(output, JUNIT_DIR, serial + ".xml");
-    this.imageDir = FileUtils.getFile(output, IMAGE_DIR, serial);
-    this.fileDir = FileUtils.getFile(output, FILE_DIR, serial);
-    this.coverageDir = FileUtils.getFile(output, COVERAGE_DIR, serial);
     this.testRunListeners = testRunListeners;
     this.grantAll = grantAll;
   }
@@ -167,13 +172,12 @@ public final class SpoonDeviceRunner {
   }
 
   /** Prepare the target device for the instrumentation */
-  public DeviceDetails prepareDevice(AndroidDebugBridge adb) {
+  public void prepareDevice(AndroidDebugBridge adb) {
     device = obtainRealDevice(adb, serial);
     logDebug(debug, "Got realDevice for [%s]", serial);
 
     // Get relevant device information.
     final DeviceDetails deviceDetails = DeviceDetails.createForDevice(device);
-
     logDebug(debug, "[%s] setDeviceDetails %s", serial, deviceDetails);
 
     DdmPreferences.setTimeOut((int) adbTimeout.toMillis());
@@ -220,11 +224,54 @@ public final class SpoonDeviceRunner {
       }
     }
 
-    return deviceDetails;
+    installAndGrantPermission();
+  }
+
+  public void installAndGrantPermission() {
+    CollectingOutputReceiver installOutPutReceiver = new CollectingOutputReceiver();
+    try {
+
+      InputStream is = null;
+      OutputStream os = null;
+
+      String tempDir = System.getProperty("java.io.tmpdir");
+
+      try {
+        is = SpoonDeviceRunner.class.getResourceAsStream("/spoon-locale-switcher-debug.apk");
+        os = new FileOutputStream(new File(tempDir, "spoon-locale-switcher-debug.apk"));
+        IOUtils.copy(is, os);
+      } catch (IOException e) {
+        throw new RuntimeException("Unable to copy apk resource to " + tempDir, e);
+      } finally {
+        IOUtils.closeQuietly(is);
+        IOUtils.closeQuietly(os);
+      }
+
+      System.out.println("apk path: " + tempDir + "spoon-locale-switcher-debug.apk");
+
+      device.installPackage(tempDir + "spoon-locale-switcher-debug.apk", true);
+      device.executeShellCommand("pm grant com.squareup.spoonlocale android.permission.CHANGE_CONFIGURATION", installOutPutReceiver);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+  }
+
+  /** Change the emulator's current locale*/
+  public String changeLocaleAndReboot(String language, String region) {
+    CollectingOutputReceiver localeOutPutReceiver = new CollectingOutputReceiver();
+    try {
+      device.executeShellCommand("pm grant com.squareup.spoonlocale android.permission.CHANGE_CONFIGURATION", localeOutPutReceiver);
+      device.executeShellCommand("am broadcast -n com.squareup.spoonlocale/.LocaleSwitcher --es locale " + language + "-" + region,localeOutPutReceiver);
+      Thread.sleep(3000);
+    } catch (Exception e) {
+      e.printStackTrace();
+    }
+
+    return language + "-" + region;
   }
 
   /** Execute instrumentation on the target device and return a result summary. */
-  public DeviceResult run(DeviceDetails deviceDetails) {
+  public DeviceResult run() {
     String testPackage = instrumentationInfo.getInstrumentationPackage();
     String testRunner = instrumentationInfo.getTestRunnerClass();
 
@@ -235,7 +282,16 @@ public final class SpoonDeviceRunner {
     }
 
     DeviceResult.Builder result = new DeviceResult.Builder();
+
+    // Get relevant device information.
+    final DeviceDetails deviceDetails = DeviceDetails.createForDevice(device);
+    logDebug(debug, "[%s] setDeviceDetails %s", serial, deviceDetails);
     result.setDeviceDetails(deviceDetails);
+
+    junitReport = FileUtils.getFile(output, JUNIT_DIR, serial + "-" + deviceDetails.getCurrentLocale() + ".xml");
+    imageDir = FileUtils.getFile(output, IMAGE_DIR, serial, deviceDetails.getCurrentLocale());
+    fileDir = FileUtils.getFile(output, FILE_DIR, serial, deviceDetails.getCurrentLocale());
+    coverageDir = FileUtils.getFile(output, COVERAGE_DIR, serial, deviceDetails.getCurrentLocale()  );
 
     // Create the output directory, if it does not already exist.
     work.mkdirs();
@@ -286,7 +342,7 @@ public final class SpoonDeviceRunner {
         runner.setTestSize(testSize);
       }
       List<ITestRunListener> listeners = new ArrayList<>();
-      listeners.add(new SpoonTestRunListener(result, debug));
+      listeners.add(new SpoonTestRunListener(result, deviceDetails.getCurrentLocale() ,debug));
       listeners.add(new XmlTestRunListener(junitReport));
       if (testRunListeners != null) {
         listeners.addAll(testRunListeners);
@@ -305,8 +361,8 @@ public final class SpoonDeviceRunner {
         pullCoverageFile(device);
       }
 
-      cleanScreenshotsDirectory(result);
-      cleanFilesDirectory(result);
+      cleanScreenshotsDirectory(result, deviceDetails);
+      cleanFilesDirectory(result, deviceDetails);
 
     } catch (Exception e) {
       result.addException(e);
@@ -328,20 +384,20 @@ public final class SpoonDeviceRunner {
     runner.addInstrumentationArg("shardIndex", Integer.toString(shardIndex));
   }
 
-  private void cleanScreenshotsDirectory(DeviceResult.Builder result) throws IOException {
+  private void cleanScreenshotsDirectory(DeviceResult.Builder result, DeviceDetails deviceDetails) throws IOException {
     File screenshotDir = new File(work, DEVICE_SCREENSHOT_DIR);
     if (screenshotDir.exists()) {
       imageDir.mkdirs();
-      handleImages(result, screenshotDir);
+      handleImages(result, screenshotDir, deviceDetails);
       FileUtils.deleteDirectory(screenshotDir);
     }
   }
 
-  private void cleanFilesDirectory(DeviceResult.Builder result) throws IOException {
+  private void cleanFilesDirectory(DeviceResult.Builder result, DeviceDetails deviceDetails) throws IOException {
     File testFilesDir = new File(work, DEVICE_FILE_DIR);
     if (testFilesDir.exists()) {
       fileDir.mkdirs();
-      handleFiles(result, testFilesDir);
+      handleFiles(result, testFilesDir, deviceDetails);
       FileUtils.deleteDirectory(testFilesDir);
     }
   }
@@ -358,7 +414,7 @@ public final class SpoonDeviceRunner {
     adbPullFile(device, remotePath, coverageFile.getAbsolutePath());
   }
 
-  private void handleImages(DeviceResult.Builder result, File screenshotDir) throws IOException {
+  private void handleImages(DeviceResult.Builder result, File screenshotDir, DeviceDetails deviceDetails) throws IOException {
     logDebug(debug, "Moving screenshots to the image folder on [%s]", serial);
     // Move all children of the screenshot directory into the image folder.
     File[] classNameDirs = screenshotDir.listFiles();
@@ -378,7 +434,7 @@ public final class SpoonDeviceRunner {
         for (File screenshot : screenshots) {
           String methodName = screenshot.getParentFile().getName();
 
-          DeviceTest testIdentifier = new DeviceTest(className, methodName);
+          DeviceTest testIdentifier = new DeviceTest(className, methodName, deviceDetails.getCurrentLocale());
           DeviceTestResult.Builder builder = result.getMethodResultBuilder(testIdentifier);
           if (builder != null) {
             builder.addScreenshot(screenshot);
@@ -407,7 +463,7 @@ public final class SpoonDeviceRunner {
     }
   }
 
-  private void handleFiles(DeviceResult.Builder result, File testFileDir) throws IOException {
+  private void handleFiles(DeviceResult.Builder result, File testFileDir, DeviceDetails deviceDetails) throws IOException {
     File[] classNameDirs = testFileDir.listFiles();
     if (classNameDirs != null) {
       logInfo("Found class name dirs: " + Arrays.toString(classNameDirs));
@@ -426,10 +482,10 @@ public final class SpoonDeviceRunner {
         // corresponding method result.
         for (File file : files) {
           String methodName = file.getParentFile().getName();
-          DeviceTest testIdentifier = new DeviceTest(className, methodName);
+          DeviceTest testIdentifier = new DeviceTest(className, methodName, deviceDetails.getCurrentLocale());
           final DeviceTestResult.Builder resultBuilder =
               result.getMethodResultBuilder(testIdentifier);
-          if (resultBuilder != null) {
+          if (resultBuilder != null ) {
             resultBuilder.addFile(file);
             logInfo("Added file as result: " + file + " for " + testIdentifier);
           } else {
@@ -540,8 +596,8 @@ public final class SpoonDeviceRunner {
       }
 
       AndroidDebugBridge adb = SpoonUtils.initAdb(target.sdk, target.adbTimeout);
-      DeviceDetails details = target.prepareDevice(adb);
-      DeviceResult result = target.run(details);
+      target.prepareDevice(adb);
+      DeviceResult result = target.run();
       AndroidDebugBridge.terminate();
 
       // Write device result file.

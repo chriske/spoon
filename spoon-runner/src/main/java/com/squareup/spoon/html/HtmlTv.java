@@ -2,6 +2,7 @@ package com.squareup.spoon.html;
 
 import com.google.gson.Gson;
 import com.squareup.spoon.DeviceDetails;
+import com.squareup.spoon.DeviceIdentifier;
 import com.squareup.spoon.DeviceResult;
 import com.squareup.spoon.DeviceTestResult;
 import com.squareup.spoon.SpoonSummary;
@@ -41,7 +42,9 @@ final class HtmlTv {
   }
 
   static final class Device implements Comparable<Device> {
-    static Device from(String serial, DeviceResult result, File outputPath) {
+    static Device from(DeviceIdentifier deviceIdentifier, DeviceResult result, File outputPath) {
+      final String serial = deviceIdentifier.getSerial();
+
       List<TestResult> testResults = result.getTestResults()
           .entrySet()
           .stream()

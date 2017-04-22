@@ -12,12 +12,14 @@ import static com.squareup.spoon.SpoonLogger.logError;
 /** Marshals an {@link ITestRunListener}'s output to a {@link DeviceResult.Builder}. */
 final class SpoonTestRunListener implements ITestRunListener {
   private final DeviceResult.Builder result;
+  private final String locale;
   private final Map<TestIdentifier, DeviceTestResult.Builder> methodResults = new HashMap<>();
   private final boolean debug;
 
-  SpoonTestRunListener(DeviceResult.Builder result, boolean debug) {
+  SpoonTestRunListener(DeviceResult.Builder result, String locale, boolean debug) {
     checkNotNull(result);
     this.result = result;
+    this.locale = locale;
     this.debug = debug;
   }
 
@@ -64,7 +66,7 @@ final class SpoonTestRunListener implements ITestRunListener {
       methodResults.put(test, methodResult);
     }
     DeviceTestResult.Builder methodResultBuilder = methodResult.endTest();
-    result.addTestResultBuilder(DeviceTest.from(test), methodResultBuilder);
+    result.addTestResultBuilder(DeviceTest.from(test, locale), methodResultBuilder);
   }
 
   @Override public void testRunFailed(String errorMessage) {

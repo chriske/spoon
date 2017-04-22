@@ -19,8 +19,11 @@ final class SpoonDeviceLogger implements LogCatListener {
   private final List<LogCatMessage> messages;
   private final LogCatReceiverTask logCatReceiverTask;
 
+  private DeviceDetails deviceDetails;
+
   SpoonDeviceLogger(IDevice device) {
     messages = new ArrayList<>();
+    deviceDetails = DeviceDetails.createForDevice(device);
     logCatReceiverTask = new LogCatReceiverTask(device);
     logCatReceiverTask.addLogCatListener(this);
 
@@ -45,7 +48,7 @@ final class SpoonDeviceLogger implements LogCatListener {
         if (current == null) {
           Matcher match = MESSAGE_START.matcher(message.getMessage());
           if (match.matches() && TEST_RUNNER.equals(message.getTag())) {
-            current = new DeviceTest(match.group(2), match.group(1));
+            current = new DeviceTest(match.group(2), match.group(1), deviceDetails.getCurrentLocale());
             pid = message.getPid();
 
             List<LogCatMessage> deviceLogMessages = new ArrayList<>();

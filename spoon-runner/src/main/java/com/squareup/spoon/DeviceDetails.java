@@ -34,9 +34,9 @@ public final class DeviceDetails {
   /** Product manufacturer and model, or AVD name if an emulator. */
   public String getName() {
     if (isEmulator) {
-      return avdName;
+      return avdName + "_" + getCurrentLocale();
     } else {
-      return manufacturer + " " + model;
+      return manufacturer + " " + model + " " + getCurrentLocale();
     }
   }
 
@@ -80,6 +80,9 @@ public final class DeviceDetails {
     return avdName;
   }
 
+  /** Locale string */
+  public String getCurrentLocale() { return language + "-" + region; }
+
   static DeviceDetails createForDevice(IDevice device) {
     String manufacturer = emptyToNull(device.getProperty("ro.product.manufacturer"));
     String model = emptyToNull(device.getProperty("ro.product.model"));
@@ -90,15 +93,16 @@ public final class DeviceDetails {
     int apiLevel = api != null ? Integer.parseInt(api) : UNKNOWN_API_LEVEL;
 
 
-    //language and region properties has been removed from API 23, only ro.product.locale exists
-    String language = emptyToNull(device.getProperty("ro.product.locale.language"));
+    //language and region properties has been removed from API 23, locale exists
+    //and: ro.build contains the default locale of the ROM, not the current setting
+    String language = emptyToNull(device.getProperty("persist.sys.language"));
     String region;
 
     if (language != null) {
       language = DeviceUtils.scrubLanguage(language);
-      region = emptyToNull(device.getProperty("ro.product.locale.region"));
+      region = emptyToNull(device.getProperty("persist.sys.country"));
     } else {
-      String locale = emptyToNull(device.getProperty("ro.product.locale"));
+      String locale = emptyToNull(device.getProperty("persist.sys.locale"));
       if (locale != null) {
         String[] localAndRegion = locale.split("-");
         language = emptyToNull(localAndRegion[0]);

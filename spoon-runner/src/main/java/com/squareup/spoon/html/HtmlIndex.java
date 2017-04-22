@@ -2,6 +2,7 @@ package com.squareup.spoon.html;
 
 import com.android.ddmlib.testrunner.IRemoteAndroidTestRunner;
 import com.squareup.spoon.DeviceDetails;
+import com.squareup.spoon.DeviceIdentifier;
 import com.squareup.spoon.DeviceResult;
 import com.squareup.spoon.DeviceTest;
 import com.squareup.spoon.DeviceTestResult;
@@ -20,7 +21,7 @@ final class HtmlIndex {
     int testsRun = 0;
     int totalSuccess = 0;
     List<Device> devices = new ArrayList<>();
-    for (Map.Entry<String, DeviceResult> result : summary.getResults().entrySet()) {
+    for (Map.Entry<DeviceIdentifier, DeviceResult> result : summary.getResults().entrySet()) {
       devices.add(Device.from(result.getKey(), result.getValue()));
       Map<DeviceTest, DeviceTestResult> testResults = result.getValue().getTestResults();
       testsRun += testResults.size();
@@ -68,26 +69,26 @@ final class HtmlIndex {
   }
 
   static final class Device implements Comparable<Device> {
-    static Device from(String serial, DeviceResult result) {
+    static Device from(DeviceIdentifier deviceIdentifier, DeviceResult result) {
       List<TestResult> testResults = result.getTestResults()
           .entrySet()
           .stream()
-          .map(entry -> TestResult.from(serial, entry.getKey(), entry.getValue()))
+          .map(entry -> TestResult.from(deviceIdentifier, entry.getKey(), entry.getValue()))
           .collect(toList());
       DeviceDetails details = result.getDeviceDetails();
-      String name = (details != null) ? details.getName() : serial;
+      String name = (details != null) ? details.getName() : deviceIdentifier.getSerial();
       boolean executionFailed = testResults.isEmpty() && !result.getExceptions().isEmpty();
-      return new Device(serial, name, testResults, executionFailed);
+      return new Device(deviceIdentifier, name, testResults, executionFailed);
     }
 
-    public final String serial;
+    public final DeviceIdentifier deviceIdentifier;
     public final String name;
     public final List<TestResult> testResults;
     public final boolean executionFailed;
     public final int testCount;
 
-    Device(String serial, String name, List<TestResult> testResults, boolean executionFailed) {
-      this.serial = serial;
+    Device(DeviceIdentifier deviceIdentifier, String name, List<TestResult> testResults, boolean executionFailed) {
+      this.deviceIdentifier = deviceIdentifier;
       this.name = name;
       this.testResults = testResults;
       this.testCount = testResults.size();
@@ -96,7 +97,7 @@ final class HtmlIndex {
 
     @Override public int compareTo(Device other) {
       if (name == null && other.name == null) {
-        return serial.compareTo(other.serial);
+        return deviceIdentifier.compareTo(other.deviceIdentifier);
       }
       if (name == null) {
         return 1;
@@ -108,29 +109,29 @@ final class HtmlIndex {
     }
 
     @Override public String toString() {
-      return name != null ? name : serial;
+      return name != null ? name : deviceIdentifier.getSerial();
     }
   }
 
   static final class TestResult implements Comparable<TestResult> {
-    static TestResult from(String serial, DeviceTest test, DeviceTestResult testResult) {
+    static TestResult from(DeviceIdentifier deviceIdentifier, DeviceTest test, DeviceTestResult testResult) {
       String className = test.getClassName();
       String methodName = test.getMethodName();
       String classSimpleName = HtmlUtils.getClassSimpleName(className);
       String testId = HtmlUtils.testClassAndMethodToId(className, methodName);
       String status = HtmlUtils.getStatusCssClass(testResult);
-      return new TestResult(serial, classSimpleName, methodName, testId, status);
+      return new TestResult(deviceIdentifier, classSimpleName, methodName, testId, status);
     }
 
-    public final String serial;
+    public final DeviceIdentifier deviceIdentifier;
     public final String classSimpleName;
     public final String prettyMethodName;
     public final String testId;
     public final String status;
 
-    TestResult(String serial, String classSimpleName, String prettyMethodName, String testId,
+    TestResult(DeviceIdentifier deviceIdentifier, String classSimpleName, String prettyMethodName, String testId,
         String status) {
-      this.serial = serial;
+      this.deviceIdentifier = deviceIdentifier;
       this.classSimpleName = classSimpleName;
       this.prettyMethodName = prettyMethodName;
       this.testId = testId;

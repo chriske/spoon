@@ -6,18 +6,21 @@ import static com.google.common.base.Preconditions.checkNotNull;
 
 /** Represents a single test method. */
 public final class DeviceTest implements Comparable<DeviceTest> {
-  static DeviceTest from(TestIdentifier testIdentifier) {
-    return new DeviceTest(testIdentifier.getClassName(), testIdentifier.getTestName());
+  static DeviceTest from(TestIdentifier testIdentifier, String locale) {
+    return new DeviceTest(testIdentifier.getClassName(), testIdentifier.getTestName(), locale);
   }
 
   private final String className;
   private final String methodName;
+  private final String locale;
 
-  DeviceTest(String className, String methodName) {
+  DeviceTest(String className, String methodName, String locale) {
     checkNotNull(className);
     checkNotNull(methodName);
+    checkNotNull(locale);
     this.className = className;
     this.methodName = methodName;
+    this.locale = locale;
   }
 
   /** Test class name. */
@@ -29,6 +32,9 @@ public final class DeviceTest implements Comparable<DeviceTest> {
   public String getMethodName() {
     return methodName;
   }
+
+  /** Device language at test. */
+  public String getLocale() { return locale; }
 
   @Override public boolean equals(Object o) {
     if (this == o) return true;
@@ -43,6 +49,7 @@ public final class DeviceTest implements Comparable<DeviceTest> {
   @Override public int hashCode() {
     int result = className.hashCode();
     result = 31 * result + methodName.hashCode();
+    result = 31 * result + locale.hashCode();
     return result;
   }
 
@@ -55,6 +62,7 @@ public final class DeviceTest implements Comparable<DeviceTest> {
     if (classCompare != 0) {
       return classCompare;
     }
+
     return methodName.compareTo(other.methodName);
   }
 }

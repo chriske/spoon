@@ -18,10 +18,10 @@ public final class SpoonSummary {
   private final IRemoteAndroidTestRunner.TestSize testSize;
   private final long started;
   private final long duration;
-  private final Map<String, DeviceResult> results;
+  private final Map<DeviceIdentifier, DeviceResult> results;
 
   private SpoonSummary(String title, IRemoteAndroidTestRunner.TestSize testSize, long started,
-      long duration, Map<String, DeviceResult> results) {
+      long duration, Map<DeviceIdentifier, DeviceResult> results) {
     this.title = title;
     this.testSize = testSize;
     this.started = started;
@@ -50,12 +50,12 @@ public final class SpoonSummary {
   }
 
   /** Individual device results by serial number. */
-  public Map<String, DeviceResult> getResults() {
+  public Map<DeviceIdentifier, DeviceResult> getResults() {
     return results;
   }
 
   static class Builder {
-    private final Map<String, DeviceResult> results = new HashMap<>();
+    private final Map<DeviceIdentifier, DeviceResult> results = new HashMap<>();
     private String title;
     private IRemoteAndroidTestRunner.TestSize testSize;
     private long started;
@@ -76,13 +76,13 @@ public final class SpoonSummary {
       return this;
     }
 
-    Builder addResult(String serial, DeviceResult result) {
-      checkNotNull(serial);
+    Builder addResult(DeviceIdentifier identifier, DeviceResult result) {
+      checkNotNull(identifier);
       checkNotNull(result);
       checkState(start != 0, "Start must be called before results can be added.");
       synchronized (results) {
-        checkArgument(!results.containsKey(serial), "Result for serial already added.");
-        results.put(serial, result);
+        checkArgument(!results.containsKey(identifier), "Result for serial already added.");
+        results.put(identifier, result);
       }
       return this;
     }

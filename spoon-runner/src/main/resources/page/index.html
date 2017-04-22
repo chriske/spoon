@@ -25,13 +25,13 @@
                             {{#devices}}
                             <tr class="device">
                                 <th colspan="{{testCount}}">
-                                    <a href="device/{{serial}}.html">{{name}}</a>
+                                    <a href="device/{{deviceIdentifier}}.html">{{name}}</a>
                                 </th>
                             </tr>
                             {{#getException}}
                             <tr class="result">
                                 <td colspan="{{testCount}}" class="test error">
-                                    <a href="device/{{serial}}.html">&nbsp;</a>
+                                    <a href="device/{{deviceIdentifier}}.html">&nbsp;</a>
                                 </td>
                             </tr>
                             {{/getException}}
@@ -39,12 +39,12 @@
                             <tr class="result">
                                 {{#testResults}}
                                 <td class="test {{status}}">
-                                    <a href="device/{{serial}}.html#{{testId}}" data-original-title="{{classSimpleName}}" data-content="{{prettyMethodName}}">&nbsp;</a>
+                                    <a href="device/{{deviceIdentifier}}.html#{{testId}}" data-original-title="{{classSimpleName}}" data-content="{{prettyMethodName}}">&nbsp;</a>
                                 </td>
                                 {{/testResults}}
                                 {{#executionFailed}}
                                 <td class="test error" colspan="{{testCount}}">
-                                    <a href="device/{{serial}}.html">&nbsp;</a>
+                                    <a href="device/{{deviceIdentifier}}.html">&nbsp;</a>
                                 </td>
                                 {{/executionFailed}}
                             </tr>

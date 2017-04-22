@@ -1,6 +1,7 @@
 package com.squareup.spoon.html;
 
 import com.squareup.spoon.DeviceDetails;
+import com.squareup.spoon.DeviceIdentifier;
 import com.squareup.spoon.DeviceResult;
 import com.squareup.spoon.DeviceTest;
 import com.squareup.spoon.DeviceTestResult;
@@ -20,7 +21,7 @@ final class HtmlTest {
     int testsPassed = 0;
     int duration = 0;
     List<TestResult> devices = new ArrayList<>();
-    for (Map.Entry<String, DeviceResult> entry : summary.getResults().entrySet()) {
+    for (Map.Entry<DeviceIdentifier, DeviceResult> entry : summary.getResults().entrySet()) {
       DeviceResult deviceResult = entry.getValue();
       DeviceTestResult testResult = deviceResult.getTestResults().get(test);
       if (testResult != null) {
@@ -29,10 +30,10 @@ final class HtmlTest {
           testsPassed += 1;
           duration += testResult.getDuration();
         }
-        String serial = entry.getKey();
+        DeviceIdentifier deviceIdentifier = entry.getKey();
         DeviceDetails details = deviceResult.getDeviceDetails();
-        String name = (details != null) ? details.getName() : serial;
-        devices.add(TestResult.from(serial, name, testResult, output));
+        String name = (details != null) ? details.getName() : deviceIdentifier.toString();
+        devices.add(TestResult.from(deviceIdentifier, name, testResult, output));
       }
     }
 
@@ -75,7 +76,7 @@ final class HtmlTest {
   }
 
   static final class TestResult implements Comparable<TestResult> {
-    static TestResult from(String serial, String name, DeviceTestResult result, File output) {
+    static TestResult from(DeviceIdentifier deviceIdentifier, String name, DeviceTestResult result, File output) {
       String status = HtmlUtils.getStatusCssClass(result);
 
       List<HtmlUtils.Screenshot> screenshots = result.getScreenshots()
@@ -85,21 +86,21 @@ final class HtmlTest {
       String animatedGif = HtmlUtils.createRelativeUri(result.getAnimatedGif(), output);
       HtmlUtils.ExceptionInfo exception = HtmlUtils.processStackTrace(result.getException());
 
-      return new TestResult(name, serial, status, screenshots, animatedGif, exception);
+      return new TestResult(name, deviceIdentifier, status, screenshots, animatedGif, exception);
     }
 
     public final String name;
-    public final String serial;
+    public final DeviceIdentifier deviceIdentifier;
     public final String status;
     public final boolean hasScreenshots;
     public final List<HtmlUtils.Screenshot> screenshots;
     public final String animatedGif;
     public final HtmlUtils.ExceptionInfo exception;
 
-    TestResult(String name, String serial, String status, List<HtmlUtils.Screenshot> screenshots,
+    TestResult(String name, DeviceIdentifier deviceIdentifier, String status, List<HtmlUtils.Screenshot> screenshots,
         String animatedGif, HtmlUtils.ExceptionInfo exception) {
       this.name = name;
-      this.serial = serial;
+      this.deviceIdentifier = deviceIdentifier;
       this.status = status;
       this.hasScreenshots = !screenshots.isEmpty();
       this.screenshots = screenshots;

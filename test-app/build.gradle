@@ -24,6 +24,13 @@ android {
 
     testInstrumentationRunner 'android.support.test.runner.AndroidJUnitRunner'
   }
+
+  buildTypes {
+    debug {
+      debuggable true
+      testCoverageEnabled true
+    }
+  }
 }
 
 configurations {
@@ -72,6 +79,7 @@ android.testVariants.all { testVariant ->
         testVariantOutputs[0].outputFile,
         '--output', outputDir,
         '--debug',
+        //'--coverage',
     ]
   }
   task.dependsOn(variantOutputs[0].assemble, testVariantOutputs[0].assemble)

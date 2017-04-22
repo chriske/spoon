@@ -1,6 +1,7 @@
 package com.squareup.spoon.html;
 
 import com.squareup.spoon.DeviceDetails;
+import com.squareup.spoon.DeviceIdentifier;
 import com.squareup.spoon.DeviceResult;
 import com.squareup.spoon.DeviceTest;
 import com.squareup.spoon.DeviceTestResult;
@@ -14,12 +15,12 @@ import static java.util.stream.Collectors.toList;
 
 /** Model for representing a {@code device.html} page. */
 final class HtmlDevice {
-  static HtmlDevice from(String serial, DeviceResult result, File output) {
+  static HtmlDevice from(DeviceIdentifier deviceIdentifier, DeviceResult result, File output) {
     List<TestResult> testResults = new ArrayList<>();
     int testsPassed = 0;
     for (Map.Entry<DeviceTest, DeviceTestResult> entry : result.getTestResults().entrySet()) {
       DeviceTestResult testResult = entry.getValue();
-      testResults.add(TestResult.from(serial, entry.getKey(), testResult, output));
+      testResults.add(TestResult.from(deviceIdentifier, entry.getKey(), testResult, output));
       if (testResult.getStatus() == Status.PASS) {
         testsPassed += 1;
       }
@@ -29,7 +30,7 @@ final class HtmlDevice {
     int testsFailed = testsRun - testsPassed;
     String totalTestsRun = testsRun + " test" + (testsRun != 1 ? "s" : "");
     DeviceDetails details = result.getDeviceDetails();
-    String title = (details != null) ? details.getName() : serial;
+    String title = (details != null) ? details.getName() : deviceIdentifier.toString();
 
     List<HtmlUtils.ExceptionInfo> exceptions = result.getExceptions()
         .stream()
@@ -51,10 +52,10 @@ final class HtmlDevice {
 
     String subtitle2 = HtmlUtils.deviceDetailsToString(details);
 
-    return new HtmlDevice(serial, title, subtitle1.toString(), subtitle2, testResults, exceptions);
+    return new HtmlDevice(deviceIdentifier, title, subtitle1.toString(), subtitle2, testResults, exceptions);
   }
 
-  public final String serial;
+  public final DeviceIdentifier deviceIdentifier;
   public final String title;
   public final String subtitle1;
   public final String subtitle2;
@@ -62,9 +63,9 @@ final class HtmlDevice {
   public final boolean hasExceptions;
   public final List<HtmlUtils.ExceptionInfo> exceptions;
 
-  HtmlDevice(String serial, String title, String subtitle1, String subtitle2,
+  HtmlDevice(DeviceIdentifier deviceIdentifier, String title, String subtitle1, String subtitle2,
       List<TestResult> testResults, List<HtmlUtils.ExceptionInfo> exceptions) {
-    this.serial = serial;
+    this.deviceIdentifier = deviceIdentifier;
     this.title = title;
     this.subtitle1 = subtitle1;
     this.subtitle2 = subtitle2;
@@ -74,7 +75,7 @@ final class HtmlDevice {
   }
 
   static final class TestResult implements Comparable<TestResult> {
-    static TestResult from(String serial, DeviceTest test, DeviceTestResult result, File output) {
+    static TestResult from(DeviceIdentifier deviceIdentifier, DeviceTest test, DeviceTestResult result, File output) {
       String className = test.getClassName();
       String methodName = test.getMethodName();
       String classSimpleName = HtmlUtils.getClassSimpleName(className);
@@ -90,11 +91,11 @@ final class HtmlDevice {
           .collect(toList());
       String animatedGif = HtmlUtils.createRelativeUri(result.getAnimatedGif(), output);
       HtmlUtils.ExceptionInfo exception = HtmlUtils.processStackTrace(result.getException());
-      return new TestResult(serial, className, methodName, classSimpleName, methodName,
+      return new TestResult(deviceIdentifier, className, methodName, classSimpleName, methodName,
           testId, status, screenshots, animatedGif, exception, files);
     }
 
-    public final String serial;
+    public final DeviceIdentifier deviceIdentifier;
     public final String className;
     public final String methodName;
     public final String classSimpleName;
@@ -108,11 +109,11 @@ final class HtmlDevice {
     public final String animatedGif;
     public final HtmlUtils.ExceptionInfo exception;
 
-    TestResult(String serial, String className, String methodName, String classSimpleName,
+    TestResult(DeviceIdentifier deviceIdentifier, String className, String methodName, String classSimpleName,
         String prettyMethodName, String testId, String status,
         List<HtmlUtils.Screenshot> screenshots, String animatedGif,
         HtmlUtils.ExceptionInfo exception, List<HtmlUtils.SavedFile> files) {
-      this.serial = serial;
+      this.deviceIdentifier = deviceIdentifier;
       this.className = className;
       this.methodName = methodName;
       this.classSimpleName = classSimpleName;

@@ -6,6 +6,7 @@ import com.github.mustachejava.MustacheFactory;
 import com.google.common.io.Resources;
 import com.google.gson.Gson;
 import com.squareup.spoon.DeviceDetails;
+import com.squareup.spoon.DeviceIdentifier;
 import com.squareup.spoon.DeviceResult;
 import com.squareup.spoon.DeviceTest;
 import com.squareup.spoon.DeviceTestResult;
@@ -107,10 +108,10 @@ public final class HtmlRenderer {
 
   private void generateDeviceHtml(MustacheFactory mustacheFactory) {
     Mustache mustache = mustacheFactory.compile("page/device.html");
-    for (Map.Entry<String, DeviceResult> entry : summary.getResults().entrySet()) {
-      String serial = entry.getKey();
-      HtmlDevice scope = HtmlDevice.from(serial, entry.getValue(), output);
-      File file = FileUtils.getFile(output, "device", serial + ".html");
+    for (Map.Entry<DeviceIdentifier, DeviceResult> entry : summary.getResults().entrySet()) {
+      DeviceIdentifier deviceIdentifier = entry.getKey();
+      HtmlDevice scope = HtmlDevice.from(deviceIdentifier, entry.getValue(), output);
+      File file = FileUtils.getFile(output, "device", entry.getKey().toString() + ".html");
       renderMustacheToFile(mustache, scope, file);
     }
   }
@@ -133,15 +134,15 @@ public final class HtmlRenderer {
 
   private void generateLogHtml(MustacheFactory mustacheFactory) {
     Mustache mustache = mustacheFactory.compile("page/log.html");
-    for (Map.Entry<String, DeviceResult> resultEntry : summary.getResults().entrySet()) {
-      String serial = resultEntry.getKey();
+    for (Map.Entry<DeviceIdentifier, DeviceResult> resultEntry : summary.getResults().entrySet()) {
+      String deviceIdentifierName = resultEntry.getKey().toString();
       DeviceResult result = resultEntry.getValue();
       DeviceDetails details = result.getDeviceDetails();
-      String name = (details != null) ? details.getName() : serial;
+      String name = (details != null) ? details.getName() : deviceIdentifierName;
       for (Map.Entry<DeviceTest, DeviceTestResult> entry : result.getTestResults().entrySet()) {
         DeviceTest test = entry.getKey();
         HtmlLog scope = HtmlLog.from(name, test, entry.getValue());
-        File file = FileUtils.getFile(output, "logs", serial, test.getClassName(),
+        File file = FileUtils.getFile(output, "logs", deviceIdentifierName, test.getClassName(),
             test.getMethodName() + ".html");
         renderMustacheToFile(mustache, scope, file);
       }

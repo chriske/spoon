@@ -172,15 +172,21 @@ public final class SpoonRunner {
       // Since there is only one device just execute it synchronously in this process.
       String serial = Iterables.getOnlyElement(serials);
       String safeSerial = SpoonUtils.sanitizeSerial(serial);
+      String currentLocale = "";
       try {
         logDebug(debug, "[%s] Starting execution.", serial);
         SpoonDeviceRunner testRunner = getTestRunner(serial, 0, 0, testInfo);
-        DeviceDetails deviceDetails = testRunner.prepareDevice(adb);
-        summary.addResult(safeSerial, testRunner.run(deviceDetails));
+        testRunner.prepareDevice(adb);
+        currentLocale = testRunner.changeLocaleAndReboot("en", "US");
+        summary.addResult(new DeviceIdentifier(safeSerial, currentLocale), testRunner.run());
+        currentLocale = testRunner.changeLocaleAndReboot("fr", "FR");
+        summary.addResult(new DeviceIdentifier(safeSerial, currentLocale), testRunner.run());
+        currentLocale = testRunner.changeLocaleAndReboot("hu", "HU");
+        summary.addResult(new DeviceIdentifier(safeSerial, currentLocale), testRunner.run());
       } catch (Exception e) {
         logDebug(debug, "[%s] Execution exception!", serial);
         e.printStackTrace(System.out);
-        summary.addResult(safeSerial, new DeviceResult.Builder().addException(e).build());
+        summary.addResult(new DeviceIdentifier(safeSerial, currentLocale), new DeviceResult.Builder().addException(e).build());
       } finally {
         logDebug(debug, "[%s] Execution done.", serial);
       }
@@ -198,11 +204,11 @@ public final class SpoonRunner {
         Runnable runnable = new Runnable() {
           @Override public void run() {
             try {
-              summary.addResult(safeSerial,
-                  getTestRunner(serial, safeShardIndex, numShards, testInfo).runInNewProcess());
+              //summary.addResult(safeSerial,
+              //    getTestRunner(serial, safeShardIndex, numShards, testInfo).runInNewProcess());
             } catch (Exception e) {
               e.printStackTrace(System.out);
-              summary.addResult(safeSerial, new DeviceResult.Builder().addException(e).build());
+              //summary.addResult(safeSerial, new DeviceResult.Builder().addException(e).build());
             } finally {
               done.countDown();
               remaining.remove(serial);
