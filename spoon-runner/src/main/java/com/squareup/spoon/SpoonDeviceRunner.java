@@ -52,6 +52,8 @@ import static com.squareup.spoon.internal.Constants.SPOON_SCREENSHOTS;
 public final class SpoonDeviceRunner {
   private static final String FILE_EXECUTION = "execution.json";
   private static final String FILE_RESULT = "result.json";
+  private static final String SPOON_LOCALE_SWITCHER_DEBUG_APK = "spoon-locale-switcher-debug.apk";
+
   private static final String DEVICE_SCREENSHOT_DIR = "app_" + SPOON_SCREENSHOTS;
   private static final String DEVICE_FILE_DIR = "app_" + SPOON_FILES;
   private static final String[] DEVICE_DIRS = {DEVICE_SCREENSHOT_DIR, DEVICE_FILE_DIR};
@@ -62,11 +64,12 @@ public final class SpoonDeviceRunner {
   static final String COVERAGE_FILE = "coverage.ec";
   static final String COVERAGE_DIR = "coverage";
 
+
   private final File sdk;
   private final File apk;
   private final File testApk;
   private final File output;
-  private final String serial;
+  private String serial;
   private final int shardIndex;
   private final int numShards;
   private final boolean debug;
@@ -237,8 +240,8 @@ public final class SpoonDeviceRunner {
       String tempDir = System.getProperty("java.io.tmpdir");
 
       try {
-        is = SpoonDeviceRunner.class.getResourceAsStream("/spoon-locale-switcher-debug.apk");
-        os = new FileOutputStream(new File(tempDir, "spoon-locale-switcher-debug.apk"));
+        is = SpoonDeviceRunner.class.getResourceAsStream("/" + SPOON_LOCALE_SWITCHER_DEBUG_APK);
+        os = new FileOutputStream(new File(tempDir, SPOON_LOCALE_SWITCHER_DEBUG_APK));
         IOUtils.copy(is, os);
       } catch (IOException e) {
         throw new RuntimeException("Unable to copy apk resource to " + tempDir, e);
@@ -247,9 +250,7 @@ public final class SpoonDeviceRunner {
         IOUtils.closeQuietly(os);
       }
 
-      System.out.println("apk path: " + tempDir + "spoon-locale-switcher-debug.apk");
-
-      device.installPackage(tempDir + "spoon-locale-switcher-debug.apk", true);
+      device.installPackage(tempDir + SPOON_LOCALE_SWITCHER_DEBUG_APK, true);
       device.executeShellCommand("pm grant com.squareup.spoonlocale android.permission.CHANGE_CONFIGURATION", installOutPutReceiver);
     } catch (Exception e) {
       e.printStackTrace();
@@ -287,6 +288,8 @@ public final class SpoonDeviceRunner {
     final DeviceDetails deviceDetails = DeviceDetails.createForDevice(device);
     logDebug(debug, "[%s] setDeviceDetails %s", serial, deviceDetails);
     result.setDeviceDetails(deviceDetails);
+
+    serial = SpoonUtils.sanitizeSerial(serial);
 
     junitReport = FileUtils.getFile(output, JUNIT_DIR, serial + "-" + deviceDetails.getCurrentLocale() + ".xml");
     imageDir = FileUtils.getFile(output, IMAGE_DIR, serial, deviceDetails.getCurrentLocale());
@@ -415,12 +418,13 @@ public final class SpoonDeviceRunner {
   }
 
   private void handleImages(DeviceResult.Builder result, File screenshotDir, DeviceDetails deviceDetails) throws IOException {
-    logDebug(debug, "Moving screenshots to the image folder on [%s]", serial);
+    logDebug(debug, "Moving screenshots to the image folder on [%s]", serial + " " + deviceDetails.getCurrentLocale());
     // Move all children of the screenshot directory into the image folder.
     File[] classNameDirs = screenshotDir.listFiles();
     if (classNameDirs != null) {
       Multimap<DeviceTest, File> testScreenshots = ArrayListMultimap.create();
       for (File classNameDir : classNameDirs) {
+
         String className = classNameDir.getName();
         File destDir = new File(imageDir, className);
         FileUtils.copyDirectory(classNameDir, destDir);

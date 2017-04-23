@@ -33,7 +33,7 @@ public final class DeviceTest implements Comparable<DeviceTest> {
     return methodName;
   }
 
-  /** Device language at test. */
+  /** Device locale at test. */
   public String getLocale() { return locale; }
 
   @Override public boolean equals(Object o) {
