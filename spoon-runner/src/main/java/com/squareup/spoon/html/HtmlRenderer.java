@@ -135,7 +135,7 @@ public final class HtmlRenderer {
   private void generateLogHtml(MustacheFactory mustacheFactory) {
     Mustache mustache = mustacheFactory.compile("page/log.html");
     for (Map.Entry<DeviceIdentifier, DeviceResult> resultEntry : summary.getResults().entrySet()) {
-      String deviceIdentifierName = resultEntry.getKey().toString();
+      String deviceIdentifierName = resultEntry.getKey().toSafeString();
       DeviceResult result = resultEntry.getValue();
       DeviceDetails details = result.getDeviceDetails();
       String name = (details != null) ? details.getName() : deviceIdentifierName;

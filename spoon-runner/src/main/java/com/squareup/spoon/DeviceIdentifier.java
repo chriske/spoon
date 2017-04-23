@@ -1,7 +1,5 @@
 package com.squareup.spoon;
 
-import org.jetbrains.annotations.NotNull;
-
 public class DeviceIdentifier implements Comparable<DeviceIdentifier>{
   private String serial;
   private String locale;
@@ -56,5 +54,9 @@ public class DeviceIdentifier implements Comparable<DeviceIdentifier>{
 
   @Override public String toString() {
     return serial + "-" + locale;
+  }
+
+  public String toSafeString() {
+    return SpoonUtils.sanitizeSerial(serial) + "-" + locale;
   }
 }

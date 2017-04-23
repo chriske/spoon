@@ -1,20 +1,16 @@
 package com.squareup.spoon;
 
-import com.android.ddmlib.AdbCommandRejectedException;
 import com.android.ddmlib.AndroidDebugBridge;
 import com.android.ddmlib.CollectingOutputReceiver;
 import com.android.ddmlib.DdmPreferences;
 import com.android.ddmlib.IDevice;
 import com.android.ddmlib.InstallException;
-import com.android.ddmlib.ShellCommandUnresponsiveException;
-import com.android.ddmlib.TimeoutException;
 import com.android.ddmlib.logcat.LogCatMessage;
 import com.android.ddmlib.testrunner.IRemoteAndroidTestRunner;
 import com.android.ddmlib.testrunner.ITestRunListener;
 import com.android.ddmlib.testrunner.RemoteAndroidTestRunner;
 import com.google.common.collect.ArrayListMultimap;
 import com.google.common.collect.Multimap;
-import com.squareup.spoon.html.HtmlRenderer;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -69,7 +65,7 @@ public final class SpoonDeviceRunner {
   private final File apk;
   private final File testApk;
   private final File output;
-  private String serial;
+  private final DeviceIdentifier deviceIdentifier;
   private final int shardIndex;
   private final int numShards;
   private final boolean debug;
@@ -90,7 +86,7 @@ public final class SpoonDeviceRunner {
   private final List<ITestRunListener> testRunListeners;
   private final boolean grantAll;
 
-  private IDevice device;
+  private transient IDevice device;
 
   /**
    * Create a test runner for a single device.
@@ -99,7 +95,7 @@ public final class SpoonDeviceRunner {
    * @param apk Path to application APK.
    * @param testApk Path to test application APK.
    * @param output Path to output directory.
-   * @param serial Device to run the test on.
+   * @param deviceIdentifier Device to run the test on. (serial + locale)
    * @param debug Whether or not debug logging is enabled.
    * @param adbTimeout time in ms for longest test execution
    * @param classpath Custom JVM classpath or {@code null}.
@@ -109,7 +105,7 @@ public final class SpoonDeviceRunner {
    * {@code className}.
    * @param testRunListeners Additional TestRunListener or empty list.
    */
-  SpoonDeviceRunner(File sdk, File apk, File testApk, File output, String serial, int shardIndex,
+  SpoonDeviceRunner(File sdk, File apk, File testApk, File output, DeviceIdentifier deviceIdentifier, int shardIndex,
       int numShards, boolean debug, boolean noAnimations, Duration adbTimeout, String classpath,
       SpoonInstrumentationInfo instrumentationInfo, List<String> instrumentationArgs,
       String className, String methodName, IRemoteAndroidTestRunner.TestSize testSize,
@@ -118,7 +114,7 @@ public final class SpoonDeviceRunner {
     this.apk = apk;
     this.testApk = testApk;
     this.output = output;
-    this.serial = serial;
+    this.deviceIdentifier = deviceIdentifier;
     this.shardIndex = shardIndex;
     this.numShards = numShards;
     this.debug = debug;
@@ -131,15 +127,14 @@ public final class SpoonDeviceRunner {
     this.classpath = classpath;
     this.instrumentationInfo = instrumentationInfo;
     this.codeCoverage = codeCoverage;
-    serial = SpoonUtils.sanitizeSerial(serial);
-    this.work = FileUtils.getFile(output, TEMP_DIR, serial);
+    this.work = FileUtils.getFile(output, TEMP_DIR, SpoonUtils.sanitizeSerial(deviceIdentifier.getSerial()));
     this.testRunListeners = testRunListeners;
     this.grantAll = grantAll;
   }
 
   /** Serialize to disk and start {@link #main(String...)} in another process. */
   public DeviceResult runInNewProcess() throws IOException, InterruptedException {
-    logDebug(debug, "[%s]", serial);
+    logDebug(debug, "[%s]", deviceIdentifier.toString());
 
     // Create the output directory.
     work.mkdirs();
@@ -157,7 +152,7 @@ public final class SpoonDeviceRunner {
     printStream(process.getErrorStream(), "STDERR");
 
     final int exitCode = process.waitFor();
-    logDebug(debug, "Process.waitFor() finished for [%s] with exitCode %d", serial, exitCode);
+    logDebug(debug, "Process.waitFor() finished for [%s] with exitCode %d", deviceIdentifier.toString(), exitCode);
 
     // Read the result from a file in the output directory.
     try (FileReader resultFile = new FileReader(new File(work, FILE_RESULT))) {
@@ -169,19 +164,24 @@ public final class SpoonDeviceRunner {
     try (BufferedReader stdout = new BufferedReader(new InputStreamReader(stream))) {
       String s;
       while ((s = stdout.readLine()) != null) {
-        logDebug(debug, "[%s] %s %s", serial, tag, s);
+        logDebug(debug, "[%s] %s %s", deviceIdentifier.toString(), tag, s);
       }
     }
   }
 
+  /** Get DeviceIdentifier for the current run **/
+  public DeviceIdentifier getDeviceIdentifier() {
+    return deviceIdentifier;
+  }
+
   /** Prepare the target device for the instrumentation */
   public void prepareDevice(AndroidDebugBridge adb) {
-    device = obtainRealDevice(adb, serial);
-    logDebug(debug, "Got realDevice for [%s]", serial);
+    device = obtainRealDevice(adb, deviceIdentifier.getSerial());
+    logDebug(debug, "Got realDevice for [%s]", deviceIdentifier.toString());
 
     // Get relevant device information.
     final DeviceDetails deviceDetails = DeviceDetails.createForDevice(device);
-    logDebug(debug, "[%s] setDeviceDetails %s", serial, deviceDetails);
+    logDebug(debug, "[%s] setDeviceDetails %s", deviceIdentifier.toString(), deviceDetails);
 
     DdmPreferences.setTimeOut((int) adbTimeout.toMillis());
 
@@ -193,7 +193,7 @@ public final class SpoonDeviceRunner {
       }
       device.installPackage(apk.getAbsolutePath(), true, extraArgument);
     } catch (InstallException e) {
-      logInfo("InstallException while install app apk on device [%s]", serial);
+      logInfo("InstallException while install app apk on device [%s]", deviceIdentifier.toString());
       e.printStackTrace(System.out);
       //return result.markInstallAsFailed(
       //    "Unable to install application APK.").addException(e).build();
@@ -201,7 +201,7 @@ public final class SpoonDeviceRunner {
     try {
       device.installPackage(testApk.getAbsolutePath(), true);
     } catch (InstallException e) {
-      logInfo("InstallException while install test apk on device [%s]", serial);
+      logInfo("InstallException while install test apk on device [%s]", deviceIdentifier.toString());
       e.printStackTrace(System.out);
       //return result.markInstallAsFailed(
       //    "Unable to install instrumentation APK.").addException(e).build();
@@ -220,7 +220,7 @@ public final class SpoonDeviceRunner {
             grantOutputReceiver);
       } catch (Exception e) {
         logInfo("Exception while granting external storage access to application apk"
-            + "on device [%s]", serial);
+            + "on device [%s]", deviceIdentifier.toString());
         e.printStackTrace(System.out);
         //return result.markInstallAsFailed(
         //    "Unable to grant external storage access to application APK.").addException(e).build();
@@ -257,18 +257,17 @@ public final class SpoonDeviceRunner {
     }
   }
 
-  /** Change the emulator's current locale*/
-  public String changeLocaleAndReboot(String language, String region) {
+  /** Change the device's current locale*/
+  public void changeLocaleAndWait(String locale) throws Exception {
     CollectingOutputReceiver localeOutPutReceiver = new CollectingOutputReceiver();
+    deviceIdentifier.setLocale(locale);
     try {
       device.executeShellCommand("pm grant com.squareup.spoonlocale android.permission.CHANGE_CONFIGURATION", localeOutPutReceiver);
-      device.executeShellCommand("am broadcast -n com.squareup.spoonlocale/.LocaleSwitcher --es locale " + language + "-" + region,localeOutPutReceiver);
+      device.executeShellCommand("am broadcast -n com.squareup.spoonlocale/.LocaleSwitcher --es locale " + locale, localeOutPutReceiver);
       Thread.sleep(3000);
     } catch (Exception e) {
-      e.printStackTrace();
+      throw new IllegalStateException("Can't change the locale of the device");
     }
-
-    return language + "-" + region;
   }
 
   /** Execute instrumentation on the target device and return a result summary. */
@@ -286,15 +285,15 @@ public final class SpoonDeviceRunner {
 
     // Get relevant device information.
     final DeviceDetails deviceDetails = DeviceDetails.createForDevice(device);
-    logDebug(debug, "[%s] setDeviceDetails %s", serial, deviceDetails);
+    logDebug(debug, "[%s] setDeviceDetails %s", deviceIdentifier.toString(), deviceDetails);
     result.setDeviceDetails(deviceDetails);
 
-    serial = SpoonUtils.sanitizeSerial(serial);
+    String safeSerial = SpoonUtils.sanitizeSerial(deviceIdentifier.getSerial());
 
-    junitReport = FileUtils.getFile(output, JUNIT_DIR, serial + "-" + deviceDetails.getCurrentLocale() + ".xml");
-    imageDir = FileUtils.getFile(output, IMAGE_DIR, serial, deviceDetails.getCurrentLocale());
-    fileDir = FileUtils.getFile(output, FILE_DIR, serial, deviceDetails.getCurrentLocale());
-    coverageDir = FileUtils.getFile(output, COVERAGE_DIR, serial, deviceDetails.getCurrentLocale()  );
+    junitReport = FileUtils.getFile(output, JUNIT_DIR, safeSerial + "-" + deviceDetails.getCurrentLocale() + ".xml");
+    imageDir = FileUtils.getFile(output, IMAGE_DIR, safeSerial, deviceDetails.getCurrentLocale());
+    fileDir = FileUtils.getFile(output, FILE_DIR, safeSerial, deviceDetails.getCurrentLocale());
+    coverageDir = FileUtils.getFile(output, COVERAGE_DIR, safeSerial, deviceDetails.getCurrentLocale()  );
 
     // Create the output directory, if it does not already exist.
     work.mkdirs();
@@ -304,7 +303,7 @@ public final class SpoonDeviceRunner {
 
     // Run all the tests! o/
     try {
-      logDebug(debug, "About to actually run tests for [%s]", serial);
+      logDebug(debug, "About to actually run tests for [%s]", deviceIdentifier.toString());
       RemoteAndroidTestRunner runner = new RemoteAndroidTestRunner(testPackage, testRunner, device);
       runner.setMaxTimeToOutputResponse(adbTimeout.toMillis(), TimeUnit.MILLISECONDS);
 
@@ -358,7 +357,7 @@ public final class SpoonDeviceRunner {
     mapLogsToTests(deviceLogger, result);
 
     try {
-      logDebug(debug, "About to grab screenshots and prepare output for [%s]", serial);
+      logDebug(debug, "About to grab screenshots and prepare output for [%s]", deviceIdentifier.toString());
       pullDeviceFiles(device);
       if (codeCoverage) {
         pullCoverageFile(device);
@@ -370,7 +369,7 @@ public final class SpoonDeviceRunner {
     } catch (Exception e) {
       result.addException(e);
     }
-    logDebug(debug, "Done running for [%s]", serial);
+    logDebug(debug, "Done running for [%s]", deviceIdentifier.toString());
 
     return result.build();
   }
@@ -418,7 +417,7 @@ public final class SpoonDeviceRunner {
   }
 
   private void handleImages(DeviceResult.Builder result, File screenshotDir, DeviceDetails deviceDetails) throws IOException {
-    logDebug(debug, "Moving screenshots to the image folder on [%s]", serial + " " + deviceDetails.getCurrentLocale());
+    logDebug(debug, "Moving screenshots to the image folder on [%s]", deviceIdentifier.toString());
     // Move all children of the screenshot directory into the image folder.
     File[] classNameDirs = screenshotDir.listFiles();
     if (classNameDirs != null) {
@@ -449,7 +448,7 @@ public final class SpoonDeviceRunner {
         }
       }
 
-      logDebug(debug, "Generating animated gifs for [%s]", serial);
+      logDebug(debug, "Generating animated gifs for [%s]", deviceIdentifier.toString());
       // Don't generate animations if the switch is present
       if (!noAnimations) {
         // Make animated GIFs for all the tests which have screenshots.
@@ -517,12 +516,12 @@ public final class SpoonDeviceRunner {
     logDebug(debug, "External path is " + externalDir.getFullPath());
 
     // Sync test output files to the local filesystem.
-    logDebug(debug, "Pulling files from external dir on [%s]", serial);
+    logDebug(debug, "Pulling files from external dir on [%s]", deviceIdentifier.toString());
     String localDirName = work.getAbsolutePath();
     adbPull(device, externalDir, localDirName);
-    logDebug(debug, "Pulling files from internal dir on [%s]", serial);
+    logDebug(debug, "Pulling files from internal dir on [%s]", deviceIdentifier.toString());
     adbPull(device, internalDir, localDirName);
-    logDebug(debug, "Done pulling %s from on [%s]", name, serial);
+    logDebug(debug, "Done pulling %s from on [%s]", name, deviceIdentifier.toString());
   }
 
   private void adbPull(IDevice device, FileEntry remoteDirName, String localDirName) {
@@ -599,8 +598,11 @@ public final class SpoonDeviceRunner {
         target = GSON.fromJson(reader, SpoonDeviceRunner.class);
       }
 
+      System.out.println("using deivceIdentifier: " + target.deviceIdentifier.toString());
+
       AndroidDebugBridge adb = SpoonUtils.initAdb(target.sdk, target.adbTimeout);
       target.prepareDevice(adb);
+      target.changeLocaleAndWait(target.deviceIdentifier.getLocale());
       DeviceResult result = target.run();
       AndroidDebugBridge.terminate();
 

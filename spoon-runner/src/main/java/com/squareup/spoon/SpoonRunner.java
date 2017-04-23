@@ -172,21 +172,27 @@ public final class SpoonRunner {
       // Since there is only one device just execute it synchronously in this process.
       String serial = Iterables.getOnlyElement(serials);
       String safeSerial = SpoonUtils.sanitizeSerial(serial);
-      String currentLocale = "";
+
+      List<DeviceIdentifier> identifiers = new ArrayList<>();
+      identifiers.add(new DeviceIdentifier(serial, "en-US"));
+      identifiers.add(new DeviceIdentifier(serial, "de-DE"));
+      identifiers.add(new DeviceIdentifier(serial, "hu-HU"));
+
+      logDebug(debug, "[%s] Starting execution.", serial);
+      SpoonDeviceRunner testRunner = getTestRunner(new DeviceIdentifier(serial, "hu-HU"), 0, 0, testInfo);
+
       try {
-        logDebug(debug, "[%s] Starting execution.", serial);
-        SpoonDeviceRunner testRunner = getTestRunner(serial, 0, 0, testInfo);
         testRunner.prepareDevice(adb);
-        currentLocale = testRunner.changeLocaleAndReboot("en", "US");
-        summary.addResult(new DeviceIdentifier(safeSerial, currentLocale), testRunner.run());
-        currentLocale = testRunner.changeLocaleAndReboot("fr", "FR");
-        summary.addResult(new DeviceIdentifier(safeSerial, currentLocale), testRunner.run());
-        currentLocale = testRunner.changeLocaleAndReboot("hu", "HU");
-        summary.addResult(new DeviceIdentifier(safeSerial, currentLocale), testRunner.run());
+
+        for (DeviceIdentifier identifier : identifiers) {
+          testRunner.changeLocaleAndWait(identifier.getLocale());
+          summary.addResult(identifier, testRunner.run());
+        }
+
       } catch (Exception e) {
         logDebug(debug, "[%s] Execution exception!", serial);
         e.printStackTrace(System.out);
-        summary.addResult(new DeviceIdentifier(safeSerial, currentLocale), new DeviceResult.Builder().addException(e).build());
+        summary.addResult(testRunner.getDeviceIdentifier(), new DeviceResult.Builder().addException(e).build());
       } finally {
         logDebug(debug, "[%s] Execution done.", serial);
       }
@@ -201,14 +207,24 @@ public final class SpoonRunner {
         final String safeSerial = SpoonUtils.sanitizeSerial(serial);
         logDebug(debug, "[%s] Starting execution.", serial);
         final int safeShardIndex = shardIndex;
+
+        List<DeviceIdentifier> identifiers = new ArrayList<>();
+        identifiers.add(new DeviceIdentifier(serial, "en-US"));
+        identifiers.add(new DeviceIdentifier(serial, "de-DE"));
+        identifiers.add(new DeviceIdentifier(serial, "hu-HU"));
+
         Runnable runnable = new Runnable() {
+
           @Override public void run() {
+            SpoonDeviceRunner testRunner = null;
             try {
-              //summary.addResult(safeSerial,
-              //    getTestRunner(serial, safeShardIndex, numShards, testInfo).runInNewProcess());
+              for (DeviceIdentifier identifier : identifiers) {
+                testRunner = getTestRunner(identifier, safeShardIndex, numShards, testInfo);
+                summary.addResult(identifier, testRunner.runInNewProcess());
+              }
             } catch (Exception e) {
               e.printStackTrace(System.out);
-              //summary.addResult(safeSerial, new DeviceResult.Builder().addException(e).build());
+              summary.addResult(testRunner.getDeviceIdentifier(), new DeviceResult.Builder().addException(e).build());
             } finally {
               done.countDown();
               remaining.remove(serial);
@@ -288,9 +304,9 @@ public final class SpoonRunner {
     return true;
   }
 
-  private SpoonDeviceRunner getTestRunner(String serial, int shardIndex, int numShards,
+  private SpoonDeviceRunner getTestRunner(DeviceIdentifier deviceIdentifier, int shardIndex, int numShards,
       SpoonInstrumentationInfo testInfo) {
-    return new SpoonDeviceRunner(androidSdk, applicationApk, instrumentationApk, output, serial,
+    return new SpoonDeviceRunner(androidSdk, applicationApk, instrumentationApk, output, deviceIdentifier,
         shardIndex, numShards, debug, noAnimations, adbTimeout, classpath, testInfo,
         instrumentationArgs, className, methodName, testSize, testRunListeners, codeCoverage,
         grantAll);
